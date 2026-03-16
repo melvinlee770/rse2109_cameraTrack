@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staging Zone Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;600;700&display=swap');
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  :root {
+    --bg: #0c0e13;
+    --surface: #14171e;
+    --surface2: #1a1e27;
+    --border: #252a35;
+    --text: #e2e5eb;
+    --text-dim: #6b7280;
+    --accent: #3b82f6;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --orange: #f97316;
+    --red: #ef4444;
+    --purple: #a855f7;
+    --us-color: #f97316;
+    --uk-color: #3b82f6;
+  }
+
+  body {
+    font-family: 'Instrument Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .header-left { display:flex; align-items:center; gap:12px; }
+  .header-left .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 8px var(--green);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .header-left .dot.stale { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .header-left .dot.offline { background: var(--text-dim); box-shadow: none; animation:none; }
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .header h1 { font-size:17px; font-weight:700; letter-spacing:-0.3px; }
+  .header h1 span { color:var(--text-dim); font-weight:400; }
+  .header-right { display:flex; align-items:center; gap:16px; }
+  .header-right .meta { font-family:'DM Mono',monospace; font-size:12px; color:var(--text-dim); }
+
+  .status-badge {
+    font-family:'DM Mono',monospace; font-size:11px; font-weight:500;
+    padding:4px 10px; border-radius:4px;
+    background: var(--green); color:#000;
+    text-transform: uppercase; letter-spacing:0.5px;
+  }
+  .status-badge.memory { background:var(--orange); }
+  .status-badge.partial { background:var(--yellow); color:#000; }
+  .status-badge.locked { background:var(--purple); color:#fff; }
+  .status-badge.searching, .status-badge.lost { background:var(--red); color:#fff; }
+
+  /* ── Countdown bar ── */
+  .countdown-bar {
+    height: 3px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: relative; overflow: hidden;
+  }
+  .countdown-fill {
+    height: 100%; background: var(--accent);
+    transition: width 1s linear;
+    width: 0%;
+  }
+
+  /* ── Main Grid ── */
+  .main { padding:20px 28px; display:grid; grid-template-columns:320px 1fr 260px; gap:20px; }
+  @media (max-width:1100px) { .main { grid-template-columns:1fr; } }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px;
+  }
+  .card-title {
+    font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:1px; color:var(--text-dim); margin-bottom:14px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .card-title .sub { font-weight:400; font-size:10px; letter-spacing:0; text-transform:none; }
+
+  /* ── Gauge ── */
+  .gauge-wrap { display:flex; flex-direction:column; align-items:center; }
+  .gauge-svg { width:240px; height:140px; }
+  .gauge-value { font-family:'DM Mono',monospace; font-size:48px; font-weight:500; margin-top:-10px; }
+  .gauge-range { font-family:'DM Mono',monospace; font-size:12px; color:var(--text-dim); margin-top:4px; }
+  .gauge-label { font-size:12px; color:var(--text-dim); margin-top:2px; }
+
+  /* ── Area stats ── */
+  .area-stats { display:flex; gap:12px; margin-top:16px; }
+  .area-stat {
+    flex:1; text-align:center; padding:10px 8px;
+    background:var(--surface2); border-radius:8px;
+  }
+  .area-stat .val { font-family:'DM Mono',monospace; font-size:18px; font-weight:500; }
+  .area-stat .lbl { font-size:10px; color:var(--text-dim); margin-top:3px; }
+
+  /* ── Chart ── */
+  .chart-container { position:relative; width:100%; height:240px; }
+  canvas { width:100%!important; height:100%!important; }
+
+  /* ── Pallets ── */
+  .pallet-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 0; border-bottom:1px solid var(--border);
+  }
+  .pallet-row:last-child { border-bottom:none; }
+  .pallet-row .type-dot { width:10px; height:10px; border-radius:3px; margin-right:10px; flex-shrink:0; }
+  .pallet-row .type-info { display:flex; align-items:center; }
+  .pallet-row .type-name { font-size:13px; font-weight:600; }
+  .pallet-row .type-dim { font-size:11px; color:var(--text-dim); }
+  .pallet-row .type-count { font-family:'DM Mono',monospace; font-size:20px; font-weight:500; }
+
+  /* ── Breakdown bar ── */
+  .breakdown-bar {
+    width:100%; height:5px; border-radius:3px;
+    background:var(--surface2); margin-top:14px; overflow:hidden; display:flex;
+  }
+  .breakdown-bar div { height:100%; transition:width 0.5s; }
+  .breakdown-legend { display:flex; gap:14px; margin-top:8px; flex-wrap:wrap; }
+  .breakdown-legend .leg-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-dim); }
+  .breakdown-legend .leg-dot { width:8px; height:8px; border-radius:2px; }
+
+  /* ── Detail rows ── */
+  .detail-row { display:flex; justify-content:space-between; align-items:center; padding:7px 0; }
+  .detail-row .dlbl { font-size:12px; color:var(--text-dim); }
+  .detail-row .dval { font-family:'DM Mono',monospace; font-size:12px; }
+  .detail-divider { height:1px; background:var(--border); margin:6px 0; }
+
+  /* ── Edge lengths ── */
+  .edge-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; }
+  .edge-item {
+    background:var(--surface2); border-radius:6px; padding:8px 10px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .edge-item .elbl { font-size:11px; color:var(--text-dim); }
+  .edge-item .eval { font-family:'DM Mono',monospace; font-size:13px; }
+
+  /* ── Snapshot info ── */
+  .snapshot-info {
+    display:flex; align-items:center; gap:10px;
+    font-family:'DM Mono',monospace; font-size:11px; color:var(--text-dim);
+    padding:8px 12px; background:var(--surface2); border-radius:6px;
+    margin-top:12px;
+  }
+  .snapshot-info .cd { color:var(--accent); }
+
+  /* ── Offline overlay ── */
+  .offline-overlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(12,14,19,0.88); z-index:100;
+    justify-content:center; align-items:center;
+    flex-direction:column; gap:12px;
+  }
+  .offline-overlay.active { display:flex; }
+  .offline-overlay .msg { font-size:16px; color:var(--text-dim); }
+  .offline-overlay .retry { font-family:'DM Mono',monospace; font-size:12px; color:var(--text-dim); }
+
+  /* ── Footer ── */
+  .footer {
+    padding:14px 28px; border-top:1px solid var(--border);
+    font-size:11px; color:var(--text-dim);
+    display:flex; justify-content:space-between;
+    font-family:'DM Mono',monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="offline-overlay" id="offlineOverlay">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5">
+    <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"/>
+  </svg>
+  <div class="msg">Connection to tracker lost</div>
+  <div class="retry" id="retryMsg">Retrying...</div>
+</div>
+
+<header class="header">
+  <div class="header-left">
+    <div class="dot" id="statusDot"></div>
+    <h1>Staging Zone <span>Utilization Monitor</span></h1>
+  </div>
+  <div class="header-right">
+    <span class="status-badge" id="zoneBadge">WAITING</span>
+    <span class="meta" id="fpsDisplay">-- FPS</span>
+    <span class="meta" id="intervalDisplay">--s interval</span>
+    <span class="meta" id="clockDisplay"></span>
+  </div>
+</header>
+
+<div class="countdown-bar">
+  <div class="countdown-fill" id="countdownFill"></div>
+</div>
+
+<main class="main">
+
+  <!-- LEFT COLUMN -->
+  <div style="display:flex;flex-direction:column;gap:20px;">
+
+    <div class="card">
+      <div class="card-title">
+        Area Utilization
+        <span class="sub" id="windowLabel">Avg over --s window</span>
+      </div>
+      <div class="gauge-wrap">
+        <svg class="gauge-svg" viewBox="0 0 240 140">
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#22c55e"/>
+              <stop offset="40%" stop-color="#eab308"/>
+              <stop offset="70%" stop-color="#f97316"/>
+              <stop offset="100%" stop-color="#ef4444"/>
+            </linearGradient>
+          </defs>
+          <path d="M 25 130 A 95 95 0 0 1 215 130" fill="none" stroke="#252a35" stroke-width="12" stroke-linecap="round"/>
+          <path id="gaugeArc" d="M 25 130 A 95 95 0 0 1 215 130" fill="none" stroke="url(#gaugeGrad)" stroke-width="12" stroke-linecap="round"
+                stroke-dasharray="298.45" stroke-dashoffset="298.45" style="transition:stroke-dashoffset 0.8s ease"/>
+        </svg>
+        <div class="gauge-value" id="utilValue">--</div>
+        <div class="gauge-range" id="utilRange"></div>
+        <div class="gauge-label">Average over snapshot window</div>
+      </div>
+      <div class="area-stats">
+        <div class="area-stat">
+          <div class="val" id="zoneArea">--</div>
+          <div class="lbl">Zone m²</div>
+        </div>
+        <div class="area-stat">
+          <div class="val" id="occArea">--</div>
+          <div class="lbl">Occupied m²</div>
+        </div>
+      </div>
+
+      <div class="snapshot-info">
+        <span>Next update in</span>
+        <span class="cd" id="countdownText">--s</span>
+        <span>|</span>
+        <span id="framesBuffered">-- frames buffered</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Pallet Breakdown <span class="sub">avg count per window</span></div>
+      <div id="palletRows">
+        <div class="pallet-row">
+          <div class="type-info">
+            <div class="type-dot" style="background:var(--us-color)"></div>
+            <div><div class="type-name">US Pallets</div><div class="type-dim">48 x 40 in</div></div>
+          </div>
+          <div class="type-count" id="countUS">0</div>
+        </div>
+        <div class="pallet-row">
+          <div class="type-info">
+            <div class="type-dot" style="background:var(--uk-color)"></div>
+            <div><div class="type-name">EU Pallets</div><div class="type-dim">1200 x 800 mm</div></div>
+          </div>
+          <div class="type-count" id="countUK">0</div>
+        </div>
+        <div class="pallet-row">
+          <div class="type-info">
+            <div class="type-dot" style="background:var(--text-dim)"></div>
+            <div><div class="type-name">Unknown</div><div class="type-dim">Unclassified</div></div>
+          </div>
+          <div class="type-count" id="countUnk">0</div>
+        </div>
+      </div>
+      <div class="breakdown-bar" id="breakdownBar">
+        <div id="segUS" style="background:var(--us-color);"></div>
+        <div id="segUK" style="background:var(--uk-color);"></div>
+        <div id="segUnk" style="background:var(--text-dim);"></div>
+      </div>
+      <div class="breakdown-legend">
+        <div class="leg-item"><div class="leg-dot" style="background:var(--us-color)"></div>US</div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--uk-color)"></div>EU</div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--text-dim)"></div>Unknown</div>
+      </div>
+      <div style="margin-top:14px;" id="clsBreakdown"></div>
+    </div>
+  </div>
+
+  <!-- CENTER COLUMN -->
+  <div style="display:flex;flex-direction:column;gap:20px;">
+    <div class="card" style="flex:1;">
+      <div class="card-title">Utilization Trend <span class="sub">shaded = min/max range</span></div>
+      <div class="chart-container"><canvas id="utilChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pallet Count Trend <span class="sub">avg per snapshot</span></div>
+      <div class="chart-container"><canvas id="countChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div style="display:flex;flex-direction:column;gap:20px;">
+    <div class="card">
+      <div class="card-title">System Details</div>
+      <div class="detail-row"><span class="dlbl">Zone Status</span><span class="dval" id="detZoneStatus">--</span></div>
+      <div class="detail-row"><span class="dlbl">Detection</span><span class="dval" id="detQuality">--</span></div>
+      <div class="detail-divider"></div>
+      <div class="detail-row"><span class="dlbl">Total Detected</span><span class="dval" id="detTotal">--</span></div>
+      <div class="detail-row"><span class="dlbl">In Zone</span><span class="dval" id="detInZone">--</span></div>
+      <div class="detail-row"><span class="dlbl">Outside Zone</span><span class="dval" id="detOutside">--</span></div>
+      <div class="detail-row"><span class="dlbl">Filtered Out</span><span class="dval" id="detFiltered">--</span></div>
+      <div class="detail-divider"></div>
+      <div class="detail-row"><span class="dlbl">Markers</span><span class="dval" id="detMarkers">--/4</span></div>
+      <div class="detail-row"><span class="dlbl">Scale</span><span class="dval" id="detPPM">-- px/m</span></div>
+      <div class="detail-row"><span class="dlbl">Confidence</span><span class="dval" id="detConf">--</span></div>
+      <div class="detail-row"><span class="dlbl">Zone Lock</span><span class="dval" id="detLock">--</span></div>
+      <div class="detail-divider"></div>
+      <div class="detail-row"><span class="dlbl">Snapshot Interval</span><span class="dval" id="detInterval">--</span></div>
+      <div class="detail-row"><span class="dlbl">Frames / Window</span><span class="dval" id="detFrames">--</span></div>
+      <div class="detail-row"><span class="dlbl">Total Snapshots</span><span class="dval" id="detSnapshots">--</span></div>
+      <div class="detail-row"><span class="dlbl">Uptime</span><span class="dval" id="detUptime">--</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Zone Edge Lengths</div>
+      <div class="edge-grid">
+        <div class="edge-item"><span class="elbl">Top</span><span class="eval" id="edgeTop">--</span></div>
+        <div class="edge-item"><span class="elbl">Right</span><span class="eval" id="edgeRight">--</span></div>
+        <div class="edge-item"><span class="elbl">Bottom</span><span class="eval" id="edgeBottom">--</span></div>
+        <div class="edge-item"><span class="elbl">Left</span><span class="eval" id="edgeLeft">--</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  <span>Staging Zone Tracker — Interval Dashboard</span>
+  <span id="lastUpdate">Last snapshot: --</span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<script>
+const API_URL = window.location.origin + "/api/data";
+const POLL_MS = 3000;
+const MAX_RETRIES = 5;
+let failCount = 0;
+let serverInterval = 30;
+
+// ── Charts ──
+const chartFont = { family: "'DM Mono', monospace", size: 11 };
+const gridColor = "#252a35";
+const baseScales = {
+  x: { display:true, grid:{color:gridColor}, ticks:{font:chartFont, color:"#6b7280", maxTicksLimit:10} },
+  y: { display:true, grid:{color:gridColor}, ticks:{font:chartFont, color:"#6b7280"} }
+};
+
+// Utilization chart with min/max range band
+const utilChart = new Chart(document.getElementById("utilChart"), {
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      { label:"Max", data:[], borderColor:"transparent", backgroundColor:"rgba(59,130,246,0.08)",
+        pointRadius:0, fill:"+1", tension:0.3, borderWidth:0 },
+      { label:"Avg", data:[], borderColor:"#3b82f6", backgroundColor:"transparent",
+        borderWidth:2, pointRadius:0, fill:false, tension:0.3 },
+      { label:"Min", data:[], borderColor:"transparent", backgroundColor:"rgba(59,130,246,0.08)",
+        pointRadius:0, fill:false, tension:0.3, borderWidth:0 },
+    ]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false, animation:{duration:300},
+    plugins: { legend:{display:false} },
+    scales: { ...baseScales, y:{...baseScales.y, min:0, max:100, ticks:{...baseScales.y.ticks, callback:v=>v+"%"}} }
+  }
+});
+
+// Count chart
+const countChart = new Chart(document.getElementById("countChart"), {
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      { label:"US", data:[], borderColor:"#f97316", borderWidth:2, pointRadius:0, tension:0.3 },
+      { label:"EU", data:[], borderColor:"#3b82f6", borderWidth:2, pointRadius:0, tension:0.3 },
+      { label:"Unknown", data:[], borderColor:"#6b7280", borderWidth:1, pointRadius:0, tension:0.3, borderDash:[4,4] },
+    ]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false, animation:{duration:300},
+    plugins: { legend:{display:true, labels:{font:chartFont, color:"#6b7280", boxWidth:12, padding:10}} },
+    scales: { ...baseScales, y:{...baseScales.y, min:0, beginAtZero:true, ticks:{...baseScales.y.ticks, stepSize:1}} }
+  }
+});
+
+// ── Gauge ──
+function setGauge(pct) {
+  const totalLen = 298.45;
+  document.getElementById("gaugeArc").style.strokeDashoffset = totalLen - (totalLen * Math.min(pct,100)/100);
+}
+function utilColor(p) {
+  return p<30 ? "#22c55e" : p<50 ? "#eab308" : p<70 ? "#f97316" : "#ef4444";
+}
+
+// ── Helpers ──
+function fmtTime(ts) {
+  return new Date(ts*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+function fmtUptime(s) {
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=Math.floor(s%60);
+  return h>0 ? `${h}h ${m}m ${sec}s` : `${m}m ${sec}s`;
+}
+function setStatus(status) {
+  const b=document.getElementById("zoneBadge"); b.textContent=status; b.className="status-badge";
+  const s=status.toLowerCase();
+  if(s.includes("lock"))b.classList.add("locked");
+  else if(s.includes("memory"))b.classList.add("memory");
+  else if(s.includes("partial"))b.classList.add("partial");
+  else if(s.includes("search")||s.includes("lost"))b.classList.add("searching");
+}
+
+// ── Countdown ──
+function updateCountdown(nextIn, interval) {
+  const pct = Math.max(0, Math.min(100, ((interval - nextIn) / interval) * 100));
+  document.getElementById("countdownFill").style.width = pct + "%";
+  document.getElementById("countdownText").textContent = Math.ceil(nextIn) + "s";
+}
+
+// ── Main Update ──
+function updateDashboard(data) {
+  const c = data.current;
+  const hist = data.history || [];
+  const srv = data.server || {};
+
+  serverInterval = srv.interval_s || 30;
+
+  if (!c || !c.timestamp) {
+    document.getElementById("windowLabel").textContent = `Waiting for first snapshot (${serverInterval}s interval)`;
+    document.getElementById("intervalDisplay").textContent = serverInterval + "s interval";
+    updateCountdown(srv.next_update_in_s || serverInterval, serverInterval);
+    document.getElementById("framesBuffered").textContent = (srv.buffered_frames||0) + " frames buffered";
+    return;
+  }
+
+  // Gauge
+  const util = c.utilization || 0;
+  document.getElementById("utilValue").textContent = util.toFixed(1) + "%";
+  document.getElementById("utilValue").style.color = utilColor(util);
+  setGauge(util);
+
+  // Min/max range
+  const uMin = c.utilization_min != null ? c.utilization_min : util;
+  const uMax = c.utilization_max != null ? c.utilization_max : util;
+  document.getElementById("utilRange").textContent = `min ${uMin.toFixed(1)}% — max ${uMax.toFixed(1)}%`;
+
+  // Window label
+  document.getElementById("windowLabel").textContent = `Avg over ${c.window_seconds||serverInterval}s (${c.frames_in_window||'--'} frames)`;
+  document.getElementById("intervalDisplay").textContent = serverInterval + "s interval";
+
+  // Countdown
+  updateCountdown(srv.next_update_in_s || 0, serverInterval);
+  document.getElementById("framesBuffered").textContent = (srv.buffered_frames||0) + " frames buffered";
+
+  // Areas
+  document.getElementById("zoneArea").textContent = c.zone_area_m2 != null ? c.zone_area_m2.toFixed(2) : "--";
+  document.getElementById("occArea").textContent  = c.occupied_area_m2 != null ? c.occupied_area_m2.toFixed(2) : "--";
+
+  // Counts
+  const counts = c.counts || {};
+  document.getElementById("countUS").textContent  = (counts.US||0).toFixed?.(1) ?? counts.US ?? 0;
+  document.getElementById("countUK").textContent  = (counts.UK||0).toFixed?.(1) ?? counts.UK ?? 0;
+  document.getElementById("countUnk").textContent = (counts.unknown||0).toFixed?.(1) ?? counts.unknown ?? 0;
+
+  const total = (counts.US||0)+(counts.UK||0)+(counts.unknown||0);
+  if(total>0){
+    document.getElementById("segUS").style.width=((counts.US||0)/total*100)+"%";
+    document.getElementById("segUK").style.width=((counts.UK||0)/total*100)+"%";
+    document.getElementById("segUnk").style.width=((counts.unknown||0)/total*100)+"%";
+  } else {
+    document.getElementById("segUS").style.width="0%";
+    document.getElementById("segUK").style.width="0%";
+    document.getElementById("segUnk").style.width="0%";
+  }
+
+  // Per-class breakdown
+  const clsCounts = c.cls_counts || {};
+  const clsDiv = document.getElementById("clsBreakdown");
+  if(Object.keys(clsCounts).length>0){
+    let html='<div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">By class (avg)</div>';
+    for(const[cls,n] of Object.entries(clsCounts)){
+      html+=`<div class="detail-row"><span class="dlbl">${cls}</span><span class="dval">${n.toFixed?.(1)??n}</span></div>`;
+    }
+    clsDiv.innerHTML=html;
+  } else clsDiv.innerHTML="";
+
+  // Status
+  setStatus(c.zone_status||"UNKNOWN");
+  document.getElementById("fpsDisplay").textContent=(c.fps||0).toFixed(1)+" FPS";
+
+  // Details
+  document.getElementById("detZoneStatus").textContent=c.zone_status||"--";
+  document.getElementById("detQuality").textContent=c.detection_quality||"--";
+  document.getElementById("detTotal").textContent=c.pallets_total!=null?c.pallets_total:"--";
+  document.getElementById("detInZone").textContent=c.pallets_in_zone!=null?c.pallets_in_zone:"--";
+  document.getElementById("detOutside").textContent=c.pallets_outside!=null?c.pallets_outside:"--";
+  document.getElementById("detFiltered").textContent=c.pallets_filtered!=null?c.pallets_filtered:"--";
+  document.getElementById("detMarkers").textContent=(c.markers_detected!=null?c.markers_detected:"--")+"/4";
+  document.getElementById("detPPM").textContent=c.ppm?c.ppm.toFixed(0)+" px/m":"--";
+  document.getElementById("detConf").textContent=c.confidence_threshold!=null?c.confidence_threshold.toFixed(2):"--";
+  document.getElementById("detLock").textContent=c.zone_locked?"LOCKED":"UNLOCKED";
+  document.getElementById("detLock").style.color=c.zone_locked?"#a855f7":"var(--text)";
+  document.getElementById("detInterval").textContent=serverInterval+"s";
+  document.getElementById("detFrames").textContent=c.frames_in_window!=null?c.frames_in_window:"--";
+  document.getElementById("detSnapshots").textContent=srv.total_snapshots!=null?srv.total_snapshots:"--";
+  document.getElementById("detUptime").textContent=srv.uptime_s?fmtUptime(srv.uptime_s):"--";
+
+  // Edges
+  const edges=c.edge_lengths_m||[];
+  document.getElementById("edgeTop").textContent=edges[0]!=null?edges[0].toFixed(2)+" m":"--";
+  document.getElementById("edgeRight").textContent=edges[1]!=null?edges[1].toFixed(2)+" m":"--";
+  document.getElementById("edgeBottom").textContent=edges[2]!=null?edges[2].toFixed(2)+" m":"--";
+  document.getElementById("edgeLeft").textContent=edges[3]!=null?edges[3].toFixed(2)+" m":"--";
+
+  // Charts
+  const labels=hist.map(h=>fmtTime(h.t));
+  utilChart.data.labels=labels;
+  utilChart.data.datasets[0].data=hist.map(h=>h.util_max);
+  utilChart.data.datasets[1].data=hist.map(h=>h.util);
+  utilChart.data.datasets[2].data=hist.map(h=>h.util_min);
+  utilChart.update("none");
+
+  countChart.data.labels=labels;
+  countChart.data.datasets[0].data=hist.map(h=>h.us);
+  countChart.data.datasets[1].data=hist.map(h=>h.uk);
+  countChart.data.datasets[2].data=hist.map(h=>h.unk);
+  countChart.update("none");
+
+  // Footer
+  document.getElementById("lastUpdate").textContent="Last snapshot: "+fmtTime(c.timestamp);
+}
+
+// ── Polling ──
+async function poll(){
+  try{
+    const resp=await fetch(API_URL);
+    if(!resp.ok)throw new Error("HTTP "+resp.status);
+    const data=await resp.json();
+    failCount=0;
+    document.getElementById("offlineOverlay").classList.remove("active");
+    document.getElementById("statusDot").classList.remove("stale","offline");
+
+    const lastTs=data.current?.timestamp||0;
+    const staleThresh=(data.server?.interval_s||30)*3;
+    if(Date.now()/1000-lastTs>staleThresh){
+      document.getElementById("statusDot").classList.add("stale");
+    }
+    updateDashboard(data);
+  }catch(e){
+    failCount++;
+    if(failCount>=MAX_RETRIES){
+      document.getElementById("offlineOverlay").classList.add("active");
+      document.getElementById("statusDot").classList.add("offline");
+      document.getElementById("retryMsg").textContent=`Retry attempt ${failCount}... (${API_URL})`;
+    }
+  }
+}
+
+function updateClock(){
+  document.getElementById("clockDisplay").textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+}
+
+setInterval(poll, POLL_MS);
+setInterval(updateClock, 1000);
+updateClock();
+poll();
+</script>
+</body>
+</html>

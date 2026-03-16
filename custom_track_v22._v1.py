@@ -1,12 +1,9 @@
 """
-Staging Zone Tracker v22 - Perspective-Corrected Dimensions + Dashboard
+Staging Zone Tracker v15 - Perspective-Corrected Dimensions
 ======================================================================
 Based on v14. Fixes dimension calculation for tilted (non-top-down)
 camera angles by measuring ArUco tag sizes in a perspective-free
 warped space instead of averaging pixel sizes in the tilted image.
-
-Added: Dashboard server integration — sends utilization snapshots
-       to an HTML dashboard at a configurable interval.
 
 Changes from v14:
   - NEW: compute_real_dims_perspective() - warps tags to bird's-eye
@@ -17,16 +14,13 @@ Changes from v14:
   - CHANGED: Edge length display uses bird's-eye warp + ppx/ppy for
     accurate per-edge measurement instead of dividing by avg ppm
   - KEPT: get_ppm() retained as approximate display indicator only
-  - NEW: Dashboard server (--port, --dashboard-interval)
 
 Usage:
-    python custom_track_v22.py --model best.pt
-    python custom_track_v22.py --model best.pt --zone-file my_zone.json
-    python custom_track_v22.py --model best.pt --dashboard-interval 10 --port 8080
+    python custom_track_v15.py --model best_v4.pt
+    python custom_track_v15.py --model best_v4.pt --zone-file my_zone.json
 """
 import cv2, cv2.aruco as aruco, numpy as np, time, argparse, os, sys, json
 from ultralytics import YOLO
-from dashboard_server import DashboardServer
 
 TAG_SIZE_CM=2.4; MODEL_PATH="best.pt"; CONF_THRESH=0.5
 MEM_TIMEOUT=5.0; SMOOTH_A=0.1; UTIL_A=0.2; MAX_JUMP_PX=30; ROLLING_N=10
@@ -296,18 +290,12 @@ def ddets(f,dets,zp):
     return iz,oz
 
 def main():
-    pa=argparse.ArgumentParser(description="Staging Zone v22 - Perspective Corrected + Dashboard")
+    pa=argparse.ArgumentParser(description="Staging Zone v15 - Perspective Corrected")
     pa.add_argument("--camera",type=int,default=0);pa.add_argument("--model",type=str,default=MODEL_PATH)
     pa.add_argument("--calib-file",type=str,default="camera_calibration.npz");pa.add_argument("--no-calib",action="store_true")
     pa.add_argument("--tag-size",type=float,default=TAG_SIZE_CM);pa.add_argument("--conf",type=float,default=CONF_THRESH)
     pa.add_argument("--memory-timeout",type=float,default=MEM_TIMEOUT);pa.add_argument("--zone-file",type=str,default=ZONE_SAVE_FILE)
-    pa.add_argument("--port", type=int, default=5000, help="Dashboard server port (default: 5000)")
-    pa.add_argument("--dashboard-interval", type=float, default=30, help="Seconds between dashboard updates (default: 30)")
     args=pa.parse_args()
-
-    # --- Start dashboard server ---
-    dashboard = DashboardServer(port=args.port, interval=args.dashboard_interval)
-    dashboard.start()
 
     if not os.path.exists(args.model): print(f"[ERROR] Model not found:{args.model}");sys.exit(1)
     print(f"[INFO] Loading YOLO:{args.model}"); model=YOLO(args.model)
@@ -344,7 +332,6 @@ def main():
 
     print(f"\n[INFO] Tag:{args.tag_size}cm Conf:{args.conf} Timeout:{args.memory_timeout}s")
     print(f"[INFO] Mode: ACTUAL FOOTPRINT (warped bounding box)")
-    print(f"[INFO] Dashboard: http://localhost:{args.port} (interval: {args.dashboard_interval}s)")
     print(f"[INFO] Controls:")
     print(f"  'l'=LOCK/UNLOCK  'h'=HIDE/SHOW UI  'b'=bird's-eye  'q'=quit")
     print(f"  'c'=ref mode  'u'=undistort  '+'/'-'=conf  's'=snap  'r'=RESET")
@@ -483,37 +470,7 @@ def main():
         fc+=1;el=time.time()-ft
         if el>1: fps=fc/el;fc=0;ft=time.time()
         if show_ui: cv2.putText(frame,f"FPS:{fps:.1f}",(w-150,35),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,255,255),2)
-
-        # --- Feed frame data to dashboard (accumulated internally, snapshot every --dashboard-interval) ---
-        edge_lengths = []
-        if lM is not None and lppx and lppy and lvp is not None:
-            for i in range(4):
-                p1=lvp[i]; p2=lvp[(i+1)%4]
-                w1=warp_pt(p1,lM); w2=warp_pt(p2,lM)
-                dx=(w2[0]-w1[0])/lppx; dy=(w2[1]-w1[1])/lppy
-                edge_lengths.append(round(np.sqrt(dx**2+dy**2), 3))
-
-        dashboard.feed({
-            "utilization":      round(us_val, 2),
-            "zone_area_m2":     round(lra, 4) if lra else None,
-            "occupied_area_m2": round(oam, 4) if oam else None,
-            "counts":           counts,
-            "cls_counts":       cls_counts,
-            "zone_status":      st,
-            "detection_quality": dq,
-            "fps":              round(fps, 1),
-            "markers_detected": nd,
-            "pallets_total":    len(fd),
-            "pallets_in_zone":  iz,
-            "pallets_outside":  oz,
-            "pallets_filtered": (len(res[0].boxes) if res[0].boxes is not None else 0) - len(fd),
-            "confidence_threshold": args.conf,
-            "zone_locked":      zone_locked,
-            "ppm":              round(lppm, 1) if lppm else None,
-            "edge_lengths_m":   edge_lengths if edge_lengths else None,
-        })
-
-        cv2.imshow("Staging Zone v22",frame)
+        cv2.imshow("Staging Zone v15",frame)
 
         # Bird's-eye window
         if show_be and lM is not None and lvp is not None:
@@ -557,7 +514,6 @@ def main():
         elif key==ord('s'): cv2.imwrite(f"snap_{time.strftime('%Y%m%d_%H%M%S')}.png",frame);print("[INFO] Snap saved")
         elif key==ord('r'): lvp=lppm=lra=lM=None;lpa=0;us_val=0;zs.reset();zone_locked=False;delete_zone_file(args.zone_file);print("[INFO] RESET")
 
-    dashboard.stop()
     tot=sum(stats.values())
     if tot>0:
         print(f"\n{'='*50}\n  DETECTION STATS\n{'='*50}")
