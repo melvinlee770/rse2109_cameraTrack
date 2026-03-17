@@ -28,7 +28,7 @@ Dependencies:
     pip install flask
 """
 
-import json, time, os, threading, statistics
+import json, time, os, threading
 import numpy as np
 from flask import Flask, jsonify, send_from_directory
 
@@ -128,89 +128,50 @@ class DashboardServer:
     # ------------------------------------------------------------------
 
     def _commit_snapshot(self, now):
-        """Average the buffer into a single snapshot. Called with lock held."""
+        """Take the last frame's data as the snapshot. Called with lock held."""
         if not self._buffer:
             return
 
-        buf = self._buffer
-        n = len(buf)
-
-        # --- Numeric fields: compute average ---
-        def avg_field(key):
-            vals = [d[key] for d in buf if d.get(key) is not None]
-            return round(statistics.mean(vals), 2) if vals else None
-
-        def last_field(key):
-            for d in reversed(buf):
-                if d.get(key) is not None:
-                    return d[key]
-            return None
-
-        # --- Count fields: average then round ---
-        def avg_counts():
-            us  = [d.get("counts", {}).get("US", 0) for d in buf]
-            uk  = [d.get("counts", {}).get("UK", 0) for d in buf]
-            unk = [d.get("counts", {}).get("unknown", 0) for d in buf]
-            return {
-                "US": round(statistics.mean(us), 1) if us else 0,
-                "UK": round(statistics.mean(uk), 1) if uk else 0,
-                "unknown": round(statistics.mean(unk), 1) if unk else 0,
-            }
-
-        # --- Per-class counts: average ---
-        def avg_cls_counts():
-            all_keys = set()
-            for d in buf:
-                all_keys.update(d.get("cls_counts", {}).keys())
-            result = {}
-            for k in all_keys:
-                vals = [d.get("cls_counts", {}).get(k, 0) for d in buf]
-                result[k] = round(statistics.mean(vals), 1)
-            return result
-
-        # --- Utilization stats ---
-        util_vals = [d["utilization"] for d in buf if d.get("utilization") is not None]
+        n = len(self._buffer)
+        last = self._buffer[-1]  # the most recent frame at this moment
 
         snapshot = {
             "timestamp":            now,
             "window_seconds":       round(now - self._last_commit_time, 1) if self._last_commit_time else self.interval,
             "frames_in_window":     n,
 
-            # Averaged metrics
-            "utilization":          round(statistics.mean(util_vals), 2) if util_vals else 0,
-            "utilization_min":      round(min(util_vals), 2) if util_vals else 0,
-            "utilization_max":      round(max(util_vals), 2) if util_vals else 0,
-            "zone_area_m2":         avg_field("zone_area_m2"),
-            "occupied_area_m2":     avg_field("occupied_area_m2"),
-            "counts":               avg_counts(),
-            "cls_counts":           avg_cls_counts(),
-            "fps":                  avg_field("fps"),
-
-            # Latest-value fields (don't average these)
-            "zone_status":          last_field("zone_status"),
-            "detection_quality":    last_field("detection_quality"),
-            "markers_detected":     last_field("markers_detected"),
-            "pallets_total":        last_field("pallets_total"),
-            "pallets_in_zone":      last_field("pallets_in_zone"),
-            "pallets_outside":      last_field("pallets_outside"),
-            "pallets_filtered":     last_field("pallets_filtered"),
-            "confidence_threshold": last_field("confidence_threshold"),
-            "zone_locked":          last_field("zone_locked"),
-            "ppm":                  last_field("ppm"),
-            "edge_lengths_m":       last_field("edge_lengths_m"),
+            # All values from the last frame at snapshot time
+            "utilization":          last.get("utilization", 0),
+            "zone_area_m2":         last.get("zone_area_m2"),
+            "occupied_area_m2":     last.get("occupied_area_m2"),
+            "counts":               last.get("counts", {"US": 0, "UK": 0, "unknown": 0}),
+            "cls_counts":           last.get("cls_counts", {}),
+            "fps":                  last.get("fps"),
+            "zone_status":          last.get("zone_status"),
+            "detection_quality":    last.get("detection_quality"),
+            "markers_detected":     last.get("markers_detected"),
+            "pallets_total":        last.get("pallets_total"),
+            "pallets_in_zone":      last.get("pallets_in_zone"),
+            "pallets_outside":      last.get("pallets_outside"),
+            "pallets_filtered":     last.get("pallets_filtered"),
+            "confidence_threshold": last.get("confidence_threshold"),
+            "zone_locked":          last.get("zone_locked"),
+            "ppm":                  last.get("ppm"),
+            "edge_lengths_m":       last.get("edge_lengths_m"),
         }
 
         self._latest_snapshot = snapshot
+        counts = snapshot["counts"]
         self._history.append({
             "t":        now,
             "util":     snapshot["utilization"],
-            "util_min": snapshot["utilization_min"],
-            "util_max": snapshot["utilization_max"],
-            "us":       snapshot["counts"]["US"],
-            "uk":       snapshot["counts"]["UK"],
-            "unk":      snapshot["counts"]["unknown"],
+            "us":       counts.get("US", 0),
+            "uk":       counts.get("UK", 0),
+            "unk":      counts.get("unknown", 0),
             "status":   snapshot["zone_status"],
             "frames":   n,
+            "zone_area_m2":     snapshot["zone_area_m2"],
+            "occupied_area_m2": snapshot["occupied_area_m2"],
         })
         if len(self._history) > self.history_max:
             self._history.pop(0)
@@ -262,6 +223,49 @@ class DashboardServer:
                 "last_snapshot_ago_s": round(time.time() - last_ts, 1),
                 "interval_s": self.interval,
             })
+
+        @self.app.route("/api/export")
+        def api_export():
+            """Export all history as a CSV file download."""
+            import io, csv
+            from flask import Response
+            with self._lock:
+                history = list(self._history)
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            # Header row
+            writer.writerow([
+                "timestamp", "datetime", "utilization_%",
+                "zone_area_m2", "occupied_area_m2",
+                "us_pallets", "uk_pallets", "unknown_pallets",
+                "zone_status"
+            ])
+            # Data rows
+            for h in history:
+                from datetime import datetime
+                ts = h.get("t", 0)
+                dt_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
+                writer.writerow([
+                    round(ts, 2),
+                    dt_str,
+                    h.get("util", 0),
+                    h.get("zone_area_m2", ""),
+                    h.get("occupied_area_m2", ""),
+                    h.get("us", 0),
+                    h.get("uk", 0),
+                    h.get("unk", 0),
+                    h.get("status", ""),
+                ])
+
+            csv_data = output.getvalue()
+            output.close()
+            filename = f"staging_zone_data_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+            return Response(
+                csv_data,
+                mimetype="text/csv",
+                headers={"Content-Disposition": f"attachment; filename={filename}"}
+            )
 
     def _run_server(self):
         import logging
