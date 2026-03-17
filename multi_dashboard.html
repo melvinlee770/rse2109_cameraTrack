@@ -26,8 +26,7 @@
   .export-btn:disabled{opacity:0.3;cursor:not-allowed;}
   .tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);padding:0 24px;}
   .tab{padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--text-dim);transition:all 0.2s;}
-  .tab:hover{color:var(--text);}
-  .tab.active{color:var(--text);border-bottom-color:var(--accent);}
+  .tab:hover{color:var(--text);} .tab.active{color:var(--text);border-bottom-color:var(--accent);}
   .tab .dot-sm{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
   .main{padding:20px 24px;display:grid;grid-template-columns:300px 1fr 240px;gap:18px;}
   @media(max-width:1100px){.main{grid-template-columns:1fr;}}
@@ -42,7 +41,7 @@
   .area-stat{flex:1;text-align:center;padding:8px;background:var(--surface2);border-radius:8px;}
   .area-stat .val{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;}
   .area-stat .lbl{font-size:10px;color:var(--text-dim);margin-top:2px;}
-  .chart-container{position:relative;width:100%;height:220px;}
+  .chart-container{position:relative;width:100%;height:200px;}
   canvas{width:100%!important;height:100%!important;}
   .pallet-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
   .pallet-row:last-child{border-bottom:none;}
@@ -51,31 +50,29 @@
   .pallet-row .type-name{font-size:12px;font-weight:600;}
   .pallet-row .type-count{font-family:'DM Mono',monospace;font-size:18px;font-weight:500;}
   .detail-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;}
-  .detail-row .dlbl{font-size:12px;color:var(--text-dim);}
-  .detail-row .dval{font-family:'DM Mono',monospace;font-size:12px;}
+  .detail-row .dlbl{font-size:12px;color:var(--text-dim);} .detail-row .dval{font-family:'DM Mono',monospace;font-size:12px;}
   .detail-divider{height:1px;background:var(--border);margin:5px 0;}
   .zone-badge{font-family:'DM Mono',monospace;font-size:10px;padding:2px 8px;border-radius:4px;text-transform:uppercase;}
   .zone-badge.a{background:rgba(34,197,94,0.15);color:var(--zone-a);}
   .zone-badge.b{background:rgba(168,85,247,0.15);color:var(--zone-b);}
+  .grid-canvas{width:100%;border-radius:8px;border:1px solid var(--border);background:var(--surface2);}
+  .grid-legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;}
+  .grid-legend .gl-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-dim);}
+  .grid-legend .gl-dot{width:12px;height:12px;border-radius:3px;}
   .offline-overlay{display:none;position:fixed;inset:0;background:rgba(12,14,19,0.88);z-index:100;justify-content:center;align-items:center;flex-direction:column;gap:12px;}
-  .offline-overlay.active{display:flex;}
-  .offline-overlay .msg{font-size:16px;color:var(--text-dim);}
+  .offline-overlay.active{display:flex;} .offline-overlay .msg{font-size:16px;color:var(--text-dim);}
   .footer{padding:12px 24px;border-top:1px solid var(--border);font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;font-family:'DM Mono',monospace;}
   .tab-content{display:none;} .tab-content.active{display:block;}
+  .grids-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:0;}
+  @media(max-width:900px){.grids-row{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
 
-<div class="offline-overlay" id="offlineOverlay">
-  <div class="msg">Connection to tracker lost</div>
-  <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);" id="retryMsg">Retrying...</div>
-</div>
+<div class="offline-overlay" id="offlineOverlay"><div class="msg">Connection to tracker lost</div><div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);" id="retryMsg">Retrying...</div></div>
 
 <header class="header">
-  <div class="header-left">
-    <div class="dot" id="statusDot"></div>
-    <h1>Staging Zone <span>Multi-Zone Monitor</span></h1>
-  </div>
+  <div class="header-left"><div class="dot" id="statusDot"></div><h1>Staging Zone <span>Multi-Zone Monitor</span></h1></div>
   <div class="header-right">
     <button class="export-btn" id="exportBtn" disabled onclick="window.location.href='/api/export'">Export CSV</button>
     <span class="meta" id="intervalDisplay">--s interval</span>
@@ -96,11 +93,9 @@
     <div class="card">
       <div class="card-title">Combined utilization <span class="sub">both zones</span></div>
       <div class="gauge-wrap">
-        <svg class="gauge-svg" viewBox="0 0 220 130">
-          <defs><linearGradient id="gg" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#22c55e"/><stop offset="40%" stop-color="#eab308"/><stop offset="70%" stop-color="#f97316"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs>
-          <path d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="#252a35" stroke-width="11" stroke-linecap="round"/>
-          <path id="gaugeArc" d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="url(#gg)" stroke-width="11" stroke-linecap="round" stroke-dasharray="282.74" stroke-dashoffset="282.74" style="transition:stroke-dashoffset 0.8s ease"/>
-        </svg>
+        <svg class="gauge-svg" viewBox="0 0 220 130"><defs><linearGradient id="gg" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#22c55e"/><stop offset="40%" stop-color="#eab308"/><stop offset="70%" stop-color="#f97316"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs>
+        <path d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="#252a35" stroke-width="11" stroke-linecap="round"/>
+        <path id="gaugeArc" d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="url(#gg)" stroke-width="11" stroke-linecap="round" stroke-dasharray="282.74" stroke-dashoffset="282.74" style="transition:stroke-dashoffset 0.8s ease"/></svg>
         <div class="gauge-value" id="cUtil">--</div>
         <div class="gauge-label">Total occupied / total zone area</div>
       </div>
@@ -110,15 +105,27 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-title">Pallet totals <span class="sub">both zones</span></div>
+      <div class="card-title">Pallet totals</div>
       <div class="pallet-row"><div class="type-info"><div class="type-dot" style="background:var(--us-color)"></div><div class="type-name">US pallets</div></div><div class="type-count" id="cUS">0</div></div>
       <div class="pallet-row"><div class="type-info"><div class="type-dot" style="background:var(--uk-color)"></div><div class="type-name">EU pallets</div></div><div class="type-count" id="cUK">0</div></div>
       <div class="pallet-row"><div class="type-info"><div class="type-dot" style="background:var(--text-dim)"></div><div class="type-name">Unknown</div></div><div class="type-count" id="cUnk">0</div></div>
     </div>
   </div>
   <div style="display:flex;flex-direction:column;gap:16px;">
-    <div class="card" style="flex:1;"><div class="card-title">Combined utilization trend</div><div class="chart-container"><canvas id="cUtilChart"></canvas></div></div>
-    <div class="card"><div class="card-title">Combined pallet count trend</div><div class="chart-container"><canvas id="cCountChart"></canvas></div></div>
+    <div class="card"><div class="card-title">Occupancy grid <span class="sub">bird's-eye view</span></div>
+      <div class="grids-row">
+        <div><div style="font-size:11px;color:var(--zone-a);margin-bottom:6px;font-weight:600;">Zone A</div><canvas class="grid-canvas" id="gridCA" height="200"></canvas></div>
+        <div><div style="font-size:11px;color:var(--zone-b);margin-bottom:6px;font-weight:600;">Zone B</div><canvas class="grid-canvas" id="gridCB" height="200"></canvas></div>
+      </div>
+      <div class="grid-legend">
+        <div class="gl-item"><div class="gl-dot" style="background:#1a2a1a;border:1px solid #2a3a2a;"></div>Empty</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#f97316;"></div>US pallet</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#3b82f6;"></div>EU pallet</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#6b7280;"></div>Unknown</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#0c0e13;border:1px solid #252a35;"></div>Outside</div>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">Utilization trend</div><div class="chart-container"><canvas id="cUtilChart"></canvas></div></div>
   </div>
   <div style="display:flex;flex-direction:column;gap:16px;">
     <div class="card">
@@ -152,12 +159,9 @@
     <div class="card">
       <div class="card-title">Zone A utilization <span class="zone-badge a">zone a</span></div>
       <div class="gauge-wrap">
-        <svg class="gauge-svg" viewBox="0 0 220 130">
-          <path d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="#252a35" stroke-width="11" stroke-linecap="round"/>
-          <path id="gaugeA" d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="var(--zone-a)" stroke-width="11" stroke-linecap="round" stroke-dasharray="282.74" stroke-dashoffset="282.74" style="transition:stroke-dashoffset 0.8s ease"/>
-        </svg>
-        <div class="gauge-value" id="zaUtil">--</div>
-        <div class="gauge-label">Zone A floor occupied</div>
+        <svg class="gauge-svg" viewBox="0 0 220 130"><path d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="#252a35" stroke-width="11" stroke-linecap="round"/>
+        <path id="gaugeA" d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="var(--zone-a)" stroke-width="11" stroke-linecap="round" stroke-dasharray="282.74" stroke-dashoffset="282.74" style="transition:stroke-dashoffset 0.8s ease"/></svg>
+        <div class="gauge-value" id="zaUtil">--</div><div class="gauge-label">Zone A floor occupied</div>
       </div>
       <div class="area-stats">
         <div class="area-stat"><div class="val" id="zaArea">--</div><div class="lbl">Zone m²</div></div>
@@ -171,8 +175,15 @@
     </div>
   </div>
   <div style="display:flex;flex-direction:column;gap:16px;">
-    <div class="card" style="flex:1;"><div class="card-title">Zone A utilization trend</div><div class="chart-container"><canvas id="zaUtilChart"></canvas></div></div>
-    <div class="card"><div class="card-title">Zone A pallet trend</div><div class="chart-container"><canvas id="zaCountChart"></canvas></div></div>
+    <div class="card"><div class="card-title">Zone A occupancy grid <span class="sub">bird's-eye</span></div><canvas class="grid-canvas" id="gridA" height="240"></canvas>
+      <div class="grid-legend" style="margin-top:8px;">
+        <div class="gl-item"><div class="gl-dot" style="background:#1a2a1a;border:1px solid #2a3a2a;"></div>Empty</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#f97316;"></div>US</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#3b82f6;"></div>EU</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#6b7280;"></div>Unknown</div>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">Zone A utilization trend</div><div class="chart-container"><canvas id="zaUtilChart"></canvas></div></div>
   </div>
   <div style="display:flex;flex-direction:column;gap:16px;">
     <div class="card">
@@ -186,6 +197,7 @@
       <div class="detail-row"><span class="dlbl">FPS</span><span class="dval" id="zaFPS">--</span></div>
       <div class="detail-row"><span class="dlbl">Locked</span><span class="dval" id="zaLock">--</span></div>
     </div>
+    <div class="card"><div class="card-title">Zone A pallet trend</div><div class="chart-container"><canvas id="zaCountChart"></canvas></div></div>
   </div>
 </main>
 </div>
@@ -197,12 +209,9 @@
     <div class="card">
       <div class="card-title">Zone B utilization <span class="zone-badge b">zone b</span></div>
       <div class="gauge-wrap">
-        <svg class="gauge-svg" viewBox="0 0 220 130">
-          <path d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="#252a35" stroke-width="11" stroke-linecap="round"/>
-          <path id="gaugeB" d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="var(--zone-b)" stroke-width="11" stroke-linecap="round" stroke-dasharray="282.74" stroke-dashoffset="282.74" style="transition:stroke-dashoffset 0.8s ease"/>
-        </svg>
-        <div class="gauge-value" id="zbUtil">--</div>
-        <div class="gauge-label">Zone B floor occupied</div>
+        <svg class="gauge-svg" viewBox="0 0 220 130"><path d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="#252a35" stroke-width="11" stroke-linecap="round"/>
+        <path id="gaugeB" d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="var(--zone-b)" stroke-width="11" stroke-linecap="round" stroke-dasharray="282.74" stroke-dashoffset="282.74" style="transition:stroke-dashoffset 0.8s ease"/></svg>
+        <div class="gauge-value" id="zbUtil">--</div><div class="gauge-label">Zone B floor occupied</div>
       </div>
       <div class="area-stats">
         <div class="area-stat"><div class="val" id="zbArea">--</div><div class="lbl">Zone m²</div></div>
@@ -216,8 +225,15 @@
     </div>
   </div>
   <div style="display:flex;flex-direction:column;gap:16px;">
-    <div class="card" style="flex:1;"><div class="card-title">Zone B utilization trend</div><div class="chart-container"><canvas id="zbUtilChart"></canvas></div></div>
-    <div class="card"><div class="card-title">Zone B pallet trend</div><div class="chart-container"><canvas id="zbCountChart"></canvas></div></div>
+    <div class="card"><div class="card-title">Zone B occupancy grid <span class="sub">bird's-eye</span></div><canvas class="grid-canvas" id="gridB" height="240"></canvas>
+      <div class="grid-legend" style="margin-top:8px;">
+        <div class="gl-item"><div class="gl-dot" style="background:#1a2a1a;border:1px solid #2a3a2a;"></div>Empty</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#f97316;"></div>US</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#3b82f6;"></div>EU</div>
+        <div class="gl-item"><div class="gl-dot" style="background:#6b7280;"></div>Unknown</div>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">Zone B utilization trend</div><div class="chart-container"><canvas id="zbUtilChart"></canvas></div></div>
   </div>
   <div style="display:flex;flex-direction:column;gap:16px;">
     <div class="card">
@@ -231,14 +247,12 @@
       <div class="detail-row"><span class="dlbl">FPS</span><span class="dval" id="zbFPS">--</span></div>
       <div class="detail-row"><span class="dlbl">Locked</span><span class="dval" id="zbLock">--</span></div>
     </div>
+    <div class="card"><div class="card-title">Zone B pallet trend</div><div class="chart-container"><canvas id="zbCountChart"></canvas></div></div>
   </div>
 </main>
 </div>
 
-<footer class="footer">
-  <span>Multi-Zone Staging Tracker</span>
-  <span id="lastUpdate">Last snapshot: --</span>
-</footer>
+<footer class="footer"><span>Multi-Zone Staging Tracker</span><span id="lastUpdate">Last snapshot: --</span></footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
@@ -248,29 +262,107 @@ function fmtTime(ts){return new Date(ts*1000).toLocaleTimeString([],{hour:"2-dig
 function fmtUp(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);return h>0?`${h}h ${m}m`:`${m}m ${sec}s`;}
 function uCol(p){return p<30?"#22c55e":p<50?"#eab308":p<70?"#f97316":"#ef4444";}
 function setArc(id,pct){document.getElementById(id).style.strokeDashoffset=282.74-(282.74*Math.min(pct,100)/100);}
-function txt(id,v){document.getElementById(id).textContent=v;}
-
-// Tab switching
+function txt(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
   document.querySelector(`.tab[data-tab="${t}"]`).classList.add('active');
-  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('tab-'+(t==='A'||t==='B'?t:'combined')).classList.add('active');
 }
 
-// Charts
+// ── Grid rendering ──
+const GRID_COLORS = {
+  "-1": "#0c0e13",  // outside zone
+  "0":  "#1a2a1a",  // empty zone (dark green tint)
+  "1":  "#f97316",  // US pallet
+  "2":  "#3b82f6",  // EU pallet
+  "3":  "#6b7280",  // unknown
+};
+const GRID_BORDER = "#252a35";
+const GRID_EMPTY_BORDER = "#2a3a2a";
+
+function drawGrid(canvasId, grid, labels) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !grid || grid.length === 0) return;
+  const ctx = canvas.getContext("2d");
+  const rows = grid.length;
+  const cols = grid[0].length;
+
+  // Set canvas size to match container width
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = Math.floor(rect.width);
+  const cellW = Math.floor(w / cols);
+  const cellH = cellW;  // square cells
+  const h = cellH * rows;
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.height = h + "px";
+
+  // Draw cells
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const v = grid[r][c];
+      const x = c * cellW;
+      const y = r * cellH;
+
+      // Fill
+      ctx.fillStyle = GRID_COLORS[String(v)] || GRID_COLORS["-1"];
+      if (v >= 1) {
+        // Occupied: solid fill
+        ctx.fillRect(x, y, cellW, cellH);
+      } else if (v === 0) {
+        // Empty zone: subtle fill
+        ctx.fillRect(x, y, cellW, cellH);
+      } else {
+        // Outside: dark
+        ctx.fillRect(x, y, cellW, cellH);
+      }
+
+      // Border
+      ctx.strokeStyle = v === 0 ? GRID_EMPTY_BORDER : (v >= 1 ? GRID_COLORS[String(v)] : GRID_BORDER);
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
+
+      // Occupied cell glow effect
+      if (v >= 1) {
+        ctx.fillStyle = GRID_COLORS[String(v)];
+        ctx.globalAlpha = 0.3;
+        ctx.fillRect(x + 2, y + 2, cellW - 4, cellH - 4);
+        ctx.globalAlpha = 1.0;
+      }
+    }
+  }
+
+  // Draw labels on occupied cells
+  if (labels && labels.length > 0) {
+    ctx.font = "bold 9px 'DM Mono', monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const lb of labels) {
+      const x = lb.col * cellW + cellW / 2;
+      const y = lb.row * cellH + cellH / 2;
+      // Background
+      const tw = ctx.measureText(lb.label).width + 6;
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(x - tw/2, y - 7, tw, 14);
+      // Text
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(lb.label, x, y);
+    }
+  }
+}
+
+// ── Charts ──
 const cf={family:"'DM Mono',monospace",size:11};const gc="#252a35";
 const bsc={x:{display:true,grid:{color:gc},ticks:{font:cf,color:"#6b7280",maxTicksLimit:8}},y:{display:true,grid:{color:gc},ticks:{font:cf,color:"#6b7280"}}};
 function mkUChart(id,color){return new Chart(document.getElementById(id),{type:"line",data:{labels:[],datasets:[{data:[],borderColor:color,backgroundColor:color+"15",borderWidth:2,pointRadius:2,pointBackgroundColor:color,fill:true,tension:0.3}]},options:{responsive:true,maintainAspectRatio:false,animation:{duration:200},plugins:{legend:{display:false}},scales:{...bsc,y:{...bsc.y,min:0,max:100,ticks:{...bsc.y.ticks,callback:v=>v+"%"}}}}});}
 function mkCChart(id){return new Chart(document.getElementById(id),{type:"line",data:{labels:[],datasets:[{label:"US",data:[],borderColor:"#f97316",borderWidth:2,pointRadius:1,tension:0.3},{label:"EU",data:[],borderColor:"#3b82f6",borderWidth:2,pointRadius:1,tension:0.3}]},options:{responsive:true,maintainAspectRatio:false,animation:{duration:200},plugins:{legend:{display:true,labels:{font:cf,color:"#6b7280",boxWidth:10,padding:8}}},scales:{...bsc,y:{...bsc.y,min:0,beginAtZero:true,ticks:{...bsc.y.ticks,stepSize:1}}}}});}
-
-const cUC=mkUChart("cUtilChart","#3b82f6");const cCC=mkCChart("cCountChart");
+const cUC=mkUChart("cUtilChart","#3b82f6");
 const zaUC=mkUChart("zaUtilChart","#22c55e");const zaCC=mkCChart("zaCountChart");
 const zbUC=mkUChart("zbUtilChart","#a855f7");const zbCC=mkCChart("zbCountChart");
-
 function updChart(ch,labels,ds){ch.data.labels=labels;ds.forEach((d,i)=>ch.data.datasets[i].data=d);ch.update("none");}
 
-function updateZone(prefix,z){
+function updateZone(prefix, z, gridCanvasId) {
   if(!z||!z.current||!z.current.timestamp)return;
   const c=z.current;const u=c.utilization||0;const ct=c.counts||{};
   txt(prefix+"Util",u.toFixed(1)+"%");
@@ -290,9 +382,11 @@ function updateZone(prefix,z){
   const uc=prefix==="za"?zaUC:zbUC;const cc=prefix==="za"?zaCC:zbCC;
   updChart(uc,lb,[h.map(x=>x.util)]);
   updChart(cc,lb,[h.map(x=>x.us),h.map(x=>x.uk)]);
+  // Draw grid
+  if(c.grid) drawGrid(gridCanvasId, c.grid, c.grid_labels||[]);
 }
 
-function update(data){
+function update(data) {
   const srv=data.server||{};const zones=data.zones||{};const comb=data.combined||{};
   document.getElementById("exportBtn").disabled=!comb.current?.timestamp;
   txt("intervalDisplay",(srv.interval_s||30)+"s interval");
@@ -313,15 +407,15 @@ function update(data){
   }
   const ch=comb.history||[];const clb=ch.map(x=>fmtTime(x.t));
   updChart(cUC,clb,[ch.map(x=>x.util)]);
-  updChart(cCC,clb,[ch.map(x=>x.us),ch.map(x=>x.uk)]);
 
-  // Zone A summary on combined tab
+  // Zone summaries on combined tab
   if(zones.A&&zones.A.current){
     const a=zones.A.current;
     txt("cZaUtil",(a.utilization||0).toFixed(1)+"%");
     txt("cZaArea",a.zone_area_m2!=null?a.zone_area_m2.toFixed(2)+"m²":"--");
     txt("cZaPallets",a.pallets_in_zone!=null?a.pallets_in_zone:"--");
     txt("cZaStatus",a.zone_status||"--");
+    if(a.grid) drawGrid("gridCA", a.grid, a.grid_labels||[]);
   }
   if(zones.B&&zones.B.current){
     const b=zones.B.current;
@@ -329,11 +423,12 @@ function update(data){
     txt("cZbArea",b.zone_area_m2!=null?b.zone_area_m2.toFixed(2)+"m²":"--");
     txt("cZbPallets",b.pallets_in_zone!=null?b.pallets_in_zone:"--");
     txt("cZbStatus",b.zone_status||"--");
+    if(b.grid) drawGrid("gridCB", b.grid, b.grid_labels||[]);
   }
 
   // Individual zone tabs
-  if(zones.A) updateZone("za",zones.A);
-  if(zones.B) updateZone("zb",zones.B);
+  if(zones.A) updateZone("za", zones.A, "gridA");
+  if(zones.B) updateZone("zb", zones.B, "gridB");
 }
 
 async function poll(){

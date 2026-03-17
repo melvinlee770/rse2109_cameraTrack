@@ -148,6 +148,8 @@ class MultiDashboardServer:
             "zone_locked":          last.get("zone_locked"),
             "ppm":                  last.get("ppm"),
             "edge_lengths_m":       last.get("edge_lengths_m"),
+            "grid":                 last.get("grid"),
+            "grid_labels":          last.get("grid_labels", []),
         }
 
         z["snapshot"] = snapshot
