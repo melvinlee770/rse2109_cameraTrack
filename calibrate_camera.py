@@ -38,10 +38,13 @@ import glob
 # =============================================================================
 
 # ChArUco board parameters
-CHARUCO_ROWS = 7        # Number of chessboard squares vertically
+CHARUCO_ROWS = 5        # Number of chessboard squares vertically
 CHARUCO_COLS = 5        # Number of chessboard squares horizontally
-SQUARE_LENGTH = 0.035   # Chessboard square size in meters (3.5 cm)
-MARKER_LENGTH = 0.024   # ArUco marker size in meters (2.6 cm)
+SQUARE_LENGTH = 0.026   # Chessboard square size in meters (2.6 cm)
+MARKER_LENGTH = 0.025   # ArUco marker size in meters (2.6 cm)
+
+# Print settings
+PRINT_DPI = 300         # Printer resolution (dots per inch)
 
 # ArUco dictionary (use a DIFFERENT dict from your staging markers to avoid conflicts)
 CHARUCO_DICT = aruco.DICT_4X4_50
@@ -60,7 +63,11 @@ MIN_IMAGES = 12
 # =============================================================================
 
 def generate_board():
-    """Generate a printable ChArUco calibration board image."""
+    """Generate a printable ChArUco calibration board image.
+    
+    The board is sized so that the printed squares match SQUARE_LENGTH exactly
+    when printed at PRINT_DPI. The board is centered on an A4 page.
+    """
     aruco_dict = aruco.getPredefinedDictionary(CHARUCO_DICT)
 
     board = aruco.CharucoBoard(
@@ -70,29 +77,75 @@ def generate_board():
         aruco_dict
     )
 
-    # Generate high-resolution board image for printing
-    # A4 at 300 DPI = 2480 x 3508 pixels
-    board_image = board.generateImage((2480, 3508), marginSize=100, borderBits=1)
+    # --- Compute pixel dimensions so printed size matches SQUARE_LENGTH ---
+    # Conversion: meters -> inches -> pixels at PRINT_DPI
+    meters_to_inches = 39.3701
+    square_px = int(SQUARE_LENGTH * meters_to_inches * PRINT_DPI)
 
-    cv2.imwrite(BOARD_IMAGE_FILE, board_image)
+    # Ensure minimum pixel size per square so ArUco bits are resolvable.
+    # DICT_4X4_50 markers need at least 6x6 px (4 data + 2 border bits).
+    # We want a comfortable margin, so enforce at least 30 px per square.
+    MIN_SQUARE_PX = 30
+    if square_px < MIN_SQUARE_PX:
+        print(f"[WARNING] At {PRINT_DPI} DPI, a {SQUARE_LENGTH*1000:.1f} mm square "
+              f"is only {square_px} px — too small to encode ArUco bits reliably.")
+        print(f"[INFO]    Upscaling to {MIN_SQUARE_PX} px per square for readability.")
+        print(f"[INFO]    The printed squares will be LARGER than {SQUARE_LENGTH*1000:.1f} mm.")
+        print(f"[INFO]    Measure the printed square and update SQUARE_LENGTH accordingly.\n")
+        square_px = MIN_SQUARE_PX
+
+    board_width_px = CHARUCO_COLS * square_px
+    board_height_px = CHARUCO_ROWS * square_px
+
+    # Generate the board image at the exact computed size (no extra margin here,
+    # we will center it on an A4 canvas ourselves).
+    board_image = board.generateImage(
+        (board_width_px, board_height_px),
+        marginSize=0,
+        borderBits=1
+    )
+
+    # --- Center on an A4 canvas (300 DPI = 2480 x 3508 px) ---
+    a4_w = int(8.27 * PRINT_DPI)   # 210 mm
+    a4_h = int(11.69 * PRINT_DPI)  # 297 mm
+
+    if board_width_px > a4_w or board_height_px > a4_h:
+        print(f"[WARNING] Board ({board_width_px}x{board_height_px} px) exceeds "
+              f"A4 page ({a4_w}x{a4_h} px) at {PRINT_DPI} DPI.")
+        print(f"[INFO]    Reduce CHARUCO_COLS/ROWS or SQUARE_LENGTH, or increase DPI.\n")
+        # Still save it, just won't fit on one sheet
+        canvas = board_image
+    else:
+        canvas = np.full((a4_h, a4_w), 255, dtype=np.uint8)
+        y_offset = (a4_h - board_height_px) // 2
+        x_offset = (a4_w - board_width_px) // 2
+        canvas[y_offset:y_offset + board_height_px,
+               x_offset:x_offset + board_width_px] = board_image
+
+    cv2.imwrite(BOARD_IMAGE_FILE, canvas)
+
+    actual_square_mm = square_px / (PRINT_DPI * meters_to_inches) * 1000
+
     print(f"\n{'='*60}")
     print(f"  CHARUCO CALIBRATION BOARD GENERATED")
     print(f"{'='*60}")
-    print(f"  Saved to    : {BOARD_IMAGE_FILE}")
-    print(f"  Board size  : {CHARUCO_COLS} x {CHARUCO_ROWS} squares")
-    print(f"  Square size : {SQUARE_LENGTH*100:.1f} cm")
-    print(f"  Marker size : {MARKER_LENGTH*100:.1f} cm")
-    print(f"  ArUco dict  : DICT_5X5_50")
+    print(f"  Saved to       : {BOARD_IMAGE_FILE}")
+    print(f"  Board layout   : {CHARUCO_COLS} x {CHARUCO_ROWS} squares")
+    print(f"  Square size    : {SQUARE_LENGTH*1000:.1f} mm  ({square_px} px at {PRINT_DPI} DPI)")
+    print(f"  Marker size    : {MARKER_LENGTH*1000:.1f} mm")
+    print(f"  ArUco dict     : DICT_4X4_50")
+    print(f"  Board pixels   : {board_width_px} x {board_height_px}")
+    print(f"  Canvas (A4)    : {a4_w} x {a4_h}")
     print(f"")
     print(f"  INSTRUCTIONS:")
-    print(f"  1. Print this image on A4 paper (actual size, no scaling)")
+    print(f"  1. Print this image on A4 paper at ACTUAL SIZE (no scaling)")
     print(f"  2. Stick it flat onto cardboard or a rigid surface")
-    print(f"  3. Measure one of the black squares with a ruler")
-    print(f"     and update SQUARE_LENGTH if it's not exactly 3.5 cm")
+    print(f"  3. Measure one black square with a ruler — it should be")
+    print(f"     {actual_square_mm:.1f} mm. If not, update SQUARE_LENGTH to match.")
     print(f"  4. Then run: python calibrate_camera.py --calibrate")
     print(f"{'='*60}\n")
 
-    return board_image
+    return canvas
 
 
 # =============================================================================

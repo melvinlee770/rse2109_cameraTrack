@@ -56,6 +56,9 @@ class MultiDashboardServer:
         # Per-zone state
         self._zones = {}  # zone_id -> {buffer, snapshot, history, last_commit, feeds}
 
+        # Snapshot images (latest JPEG per zone)
+        self._snapshot_images = {}  # zone_id -> bytes (JPEG)
+
         # Combined history
         self._combined_history = []
 
@@ -116,6 +119,11 @@ class MultiDashboardServer:
                 self._commit_combined(time.time())
         print("[DASHBOARD] Server stopping.")
 
+    def store_snapshot_image(self, zone_id, jpg_bytes):
+        """Store the latest annotated camera frame as JPEG for download."""
+        with self._lock:
+            self._snapshot_images[zone_id] = jpg_bytes
+
     # ------------------------------------------------------------------
     # Snapshot logic
     # ------------------------------------------------------------------
@@ -150,6 +158,9 @@ class MultiDashboardServer:
             "edge_lengths_m":       last.get("edge_lengths_m"),
             "grid":                 last.get("grid"),
             "grid_labels":          last.get("grid_labels", []),
+            "grid_cols":            last.get("grid_cols", 0),
+            "grid_rows":            last.get("grid_rows", 0),
+            "grid_pallet_info":     last.get("grid_pallet_info", {}),
         }
 
         z["snapshot"] = snapshot
@@ -325,6 +336,18 @@ class MultiDashboardServer:
                         "last_snapshot_ago_s": round(time.time() - last_ts, 1),
                     }
             return jsonify({"zones": zone_status, "interval_s": self.interval})
+
+        @self.app.route("/api/snapshot/<zone_id>")
+        def api_snapshot(zone_id):
+            """Download the latest annotated camera frame as JPEG."""
+            import time as _time
+            with self._lock:
+                jpg = self._snapshot_images.get(zone_id)
+            if jpg is None:
+                return Response("No snapshot available", status=404)
+            fname = f"zone_{zone_id}_{_time.strftime('%Y%m%d_%H%M%S')}.jpg"
+            return Response(jpg, mimetype="image/jpeg",
+                            headers={"Content-Disposition": f"attachment; filename={fname}"})
 
     def _run_server(self):
         import logging

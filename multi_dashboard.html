@@ -74,6 +74,8 @@
 <header class="header">
   <div class="header-left"><div class="dot" id="statusDot"></div><h1>Staging Zone <span>Multi-Zone Monitor</span></h1></div>
   <div class="header-right">
+    <button class="export-btn" id="snapBtnA" disabled onclick="window.location.href='/api/snapshot/A'" style="border-color:var(--zone-a);color:var(--zone-a);">Snapshot A</button>
+    <button class="export-btn" id="snapBtnB" disabled onclick="window.location.href='/api/snapshot/B'" style="border-color:var(--zone-b);color:var(--zone-b);">Snapshot B</button>
     <button class="export-btn" id="exportBtn" disabled onclick="window.location.href='/api/export'">Export CSV</button>
     <span class="meta" id="intervalDisplay">--s interval</span>
     <span class="meta" id="clockDisplay"></span>
@@ -271,28 +273,32 @@ function switchTab(t){
 }
 
 // ── Grid rendering ──
-const GRID_COLORS = {
-  "-1": "#0c0e13",  // outside zone
-  "0":  "#1a2a1a",  // empty zone (dark green tint)
-  "1":  "#f97316",  // US pallet
-  "2":  "#3b82f6",  // EU pallet
-  "3":  "#6b7280",  // unknown
-};
+const TYPE_COLORS = { "US": "#f97316", "UK": "#3b82f6", "unknown": "#6b7280" };
+const GRID_BG_OUTSIDE = "#0c0e13";
+const GRID_BG_EMPTY = "#1a2a1a";
 const GRID_BORDER = "#252a35";
 const GRID_EMPTY_BORDER = "#2a3a2a";
+const PALLET_EDGE_COLOR = "#0c0e13";  // dark line between adjacent pallets
 
-function drawGrid(canvasId, grid, labels) {
+function getTypeColor(palletId, palletInfo) {
+  if (palletId <= 0) return palletId === 0 ? GRID_BG_EMPTY : GRID_BG_OUTSIDE;
+  const info = palletInfo[String(palletId)];
+  if (!info) return "#6b7280";
+  return TYPE_COLORS[info.type] || "#6b7280";
+}
+
+function drawGrid(canvasId, grid, labels, palletInfo) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !grid || grid.length === 0) return;
   const ctx = canvas.getContext("2d");
   const rows = grid.length;
   const cols = grid[0].length;
+  palletInfo = palletInfo || {};
 
-  // Set canvas size to match container width
   const rect = canvas.parentElement.getBoundingClientRect();
   const w = Math.floor(rect.width);
   const cellW = Math.floor(w / cols);
-  const cellH = cellW;  // square cells
+  const cellH = cellW;
   const h = cellH * rows;
   canvas.width = w;
   canvas.height = h;
@@ -305,35 +311,63 @@ function drawGrid(canvasId, grid, labels) {
       const x = c * cellW;
       const y = r * cellH;
 
-      // Fill
-      ctx.fillStyle = GRID_COLORS[String(v)] || GRID_COLORS["-1"];
-      if (v >= 1) {
-        // Occupied: solid fill
-        ctx.fillRect(x, y, cellW, cellH);
-      } else if (v === 0) {
-        // Empty zone: subtle fill
-        ctx.fillRect(x, y, cellW, cellH);
-      } else {
-        // Outside: dark
-        ctx.fillRect(x, y, cellW, cellH);
-      }
+      // Fill by type color
+      ctx.fillStyle = getTypeColor(v, palletInfo);
+      ctx.fillRect(x, y, cellW, cellH);
 
-      // Border
-      ctx.strokeStyle = v === 0 ? GRID_EMPTY_BORDER : (v >= 1 ? GRID_COLORS[String(v)] : GRID_BORDER);
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
-
-      // Occupied cell glow effect
-      if (v >= 1) {
-        ctx.fillStyle = GRID_COLORS[String(v)];
-        ctx.globalAlpha = 0.3;
-        ctx.fillRect(x + 2, y + 2, cellW - 4, cellH - 4);
-        ctx.globalAlpha = 1.0;
+      // Subtle inner border for empty cells
+      if (v === 0) {
+        ctx.strokeStyle = GRID_EMPTY_BORDER;
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
       }
     }
   }
 
-  // Draw labels on occupied cells
+  // Draw thick borders between cells that belong to DIFFERENT pallets
+  // This separates adjacent same-type pallets visually
+  ctx.strokeStyle = PALLET_EDGE_COLOR;
+  ctx.lineWidth = 2;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const v = grid[r][c];
+      if (v <= 0) continue;  // only draw borders around pallet cells
+      const x = c * cellW;
+      const y = r * cellH;
+
+      // Right neighbor: different pallet or empty/outside
+      if (c + 1 < cols) {
+        const nr = grid[r][c + 1];
+        if (nr !== v) {
+          ctx.beginPath(); ctx.moveTo(x + cellW, y); ctx.lineTo(x + cellW, y + cellH); ctx.stroke();
+        }
+      } else {
+        ctx.beginPath(); ctx.moveTo(x + cellW, y); ctx.lineTo(x + cellW, y + cellH); ctx.stroke();
+      }
+
+      // Bottom neighbor
+      if (r + 1 < rows) {
+        const nb = grid[r + 1][c];
+        if (nb !== v) {
+          ctx.beginPath(); ctx.moveTo(x, y + cellH); ctx.lineTo(x + cellW, y + cellH); ctx.stroke();
+        }
+      } else {
+        ctx.beginPath(); ctx.moveTo(x, y + cellH); ctx.lineTo(x + cellW, y + cellH); ctx.stroke();
+      }
+
+      // Left neighbor
+      if (c === 0 || grid[r][c - 1] !== v) {
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + cellH); ctx.stroke();
+      }
+
+      // Top neighbor
+      if (r === 0 || grid[r - 1][c] !== v) {
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + cellW, y); ctx.stroke();
+      }
+    }
+  }
+
+  // Draw labels
   if (labels && labels.length > 0) {
     ctx.font = "bold 9px 'DM Mono', monospace";
     ctx.textAlign = "center";
@@ -341,11 +375,9 @@ function drawGrid(canvasId, grid, labels) {
     for (const lb of labels) {
       const x = lb.col * cellW + cellW / 2;
       const y = lb.row * cellH + cellH / 2;
-      // Background
       const tw = ctx.measureText(lb.label).width + 6;
       ctx.fillStyle = "rgba(0,0,0,0.7)";
       ctx.fillRect(x - tw/2, y - 7, tw, 14);
-      // Text
       ctx.fillStyle = "#ffffff";
       ctx.fillText(lb.label, x, y);
     }
@@ -383,12 +415,14 @@ function updateZone(prefix, z, gridCanvasId) {
   updChart(uc,lb,[h.map(x=>x.util)]);
   updChart(cc,lb,[h.map(x=>x.us),h.map(x=>x.uk)]);
   // Draw grid
-  if(c.grid) drawGrid(gridCanvasId, c.grid, c.grid_labels||[]);
+  if(c.grid) drawGrid(gridCanvasId, c.grid, c.grid_labels||[], c.grid_pallet_info||{});
 }
 
 function update(data) {
   const srv=data.server||{};const zones=data.zones||{};const comb=data.combined||{};
   document.getElementById("exportBtn").disabled=!comb.current?.timestamp;
+  document.getElementById("snapBtnA").disabled=!(zones.A&&zones.A.current&&zones.A.current.timestamp);
+  document.getElementById("snapBtnB").disabled=!(zones.B&&zones.B.current&&zones.B.current.timestamp);
   txt("intervalDisplay",(srv.interval_s||30)+"s interval");
   txt("cInterval",(srv.interval_s||30)+"s");
   txt("cUptime",srv.uptime_s?fmtUp(srv.uptime_s):"--");
@@ -415,7 +449,7 @@ function update(data) {
     txt("cZaArea",a.zone_area_m2!=null?a.zone_area_m2.toFixed(2)+"m²":"--");
     txt("cZaPallets",a.pallets_in_zone!=null?a.pallets_in_zone:"--");
     txt("cZaStatus",a.zone_status||"--");
-    if(a.grid) drawGrid("gridCA", a.grid, a.grid_labels||[]);
+    if(a.grid) drawGrid("gridCA", a.grid, a.grid_labels||[], a.grid_pallet_info||{});
   }
   if(zones.B&&zones.B.current){
     const b=zones.B.current;
@@ -423,7 +457,7 @@ function update(data) {
     txt("cZbArea",b.zone_area_m2!=null?b.zone_area_m2.toFixed(2)+"m²":"--");
     txt("cZbPallets",b.pallets_in_zone!=null?b.pallets_in_zone:"--");
     txt("cZbStatus",b.zone_status||"--");
-    if(b.grid) drawGrid("gridCB", b.grid, b.grid_labels||[]);
+    if(b.grid) drawGrid("gridCB", b.grid, b.grid_labels||[], b.grid_pallet_info||{});
   }
 
   // Individual zone tabs
